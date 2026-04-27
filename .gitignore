@@ -19,6 +19,7 @@ pnpm-debug.log*
 
 # Chemistry input/output files
 *.cif
+!data/cifs/XUYNOX.cif
 *.xyz
 *.mol2
 

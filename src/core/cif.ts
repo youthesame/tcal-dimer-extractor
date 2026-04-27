@@ -12,7 +12,7 @@ import {
 	inferBonds,
 	unwrapMoleculeAcrossPbc,
 } from "./molecule";
-import { centroid, distance, translateByCell } from "./vector";
+import { centroid, translateByCell } from "./vector";
 
 const rangeEpsilon = 1e-8;
 
@@ -58,7 +58,10 @@ export function parseCrystalFromCif(
 		rawAtomCount,
 		preferredMoleculeAtomCount: inferPreferredMoleculeAtomCount(
 			cifText,
+			symbols,
 			positions.map(toVec3),
+			fractional.map(toVec3),
+			cell,
 		),
 	};
 }
@@ -248,21 +251,84 @@ function buildSymmetryOrderedMolecules(
 
 function inferPreferredMoleculeAtomCount(
 	cifText: string,
+	symbols: string[],
 	positions: Vec3[],
+	fractional: Vec3[],
+	cell: [Vec3, Vec3, Vec3],
 ): number | null {
 	const rawAtomCount = getRawAtomCount(cifText);
 	if (!rawAtomCount || rawAtomCount <= 0) return null;
 
-	if (rawAtomCount % 2 === 0 && positions.length >= rawAtomCount) {
-		const half = rawAtomCount / 2;
-		const firstCentroid = centroid(positions.slice(0, half));
-		const secondCentroid = centroid(positions.slice(half, rawAtomCount));
-		if (distance(firstCentroid, secondCentroid) > 3) {
-			return half;
+	const symmetryCount = positions.length / rawAtomCount;
+	if (!Number.isInteger(symmetryCount) || symmetryCount < 1) return rawAtomCount;
+
+	const rawAtoms = Array.from({ length: rawAtomCount }, (_, rawIndex): Atom => {
+		const atomIndex = rawIndex * symmetryCount;
+		return {
+			id: `raw-atom-${rawIndex}`,
+			element: symbols[atomIndex],
+			position: positions[atomIndex],
+			fractional: fractional[atomIndex],
+			sourceIndex: rawIndex,
+			translation: [0, 0, 0],
+		};
+	});
+
+	for (const atomCount of moleculeAtomCountCandidates(rawAtomCount)) {
+		if (rawAtomCount % atomCount !== 0) continue;
+		const chunksAreConnected = range(0, rawAtomCount, atomCount).every((start) =>
+			isConnectedMoleculeChunk(rawAtoms.slice(start, start + atomCount), cell),
+		);
+		if (chunksAreConnected) {
+			return atomCount;
 		}
 	}
 
 	return rawAtomCount;
+}
+
+function moleculeAtomCountCandidates(rawAtomCount: number): number[] {
+	const candidates: number[] = [];
+	for (let atomCount = rawAtomCount; atomCount >= 2; atomCount -= 1) {
+		if (rawAtomCount % atomCount === 0) candidates.push(atomCount);
+	}
+	return candidates;
+}
+
+function range(start: number, end: number, step: number): number[] {
+	const values: number[] = [];
+	for (let value = start; value < end; value += step) {
+		values.push(value);
+	}
+	return values;
+}
+
+function isConnectedMoleculeChunk(
+	atoms: Atom[],
+	cell: [Vec3, Vec3, Vec3],
+): boolean {
+	const unwrapped = unwrapMoleculeAcrossPbc(atoms, cell);
+	const bonds = inferBonds(unwrapped);
+	if (atoms.length < 2 || bonds.length === 0) return false;
+
+	const adjacency = Array.from({ length: atoms.length }, () => [] as number[]);
+	for (const bond of bonds) {
+		adjacency[bond.from].push(bond.to);
+		adjacency[bond.to].push(bond.from);
+	}
+
+	const visited = new Set<number>([0]);
+	const queue = [0];
+	while (queue.length > 0) {
+		const current = queue.shift()!;
+		for (const next of adjacency[current]) {
+			if (!visited.has(next)) {
+				visited.add(next);
+				queue.push(next);
+			}
+		}
+	}
+	return visited.size === atoms.length;
 }
 
 function getRawAtomCount(cifText: string): number | null {
