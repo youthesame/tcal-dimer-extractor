@@ -2,8 +2,8 @@
 
 このファイルを読んだエージェントは、作業開始時に必ずプロジェクトローカル skill も確認する。
 
-- `.codex/skills/tcal-dimer-extractor/SKILL.md`: tcal dimer extractor のプロダクト・実装・検証方針。
-- `.codex/skills/tcal-agent-delegation/SKILL.md`: サブエージェント委任と、委任プロンプトを誤って最終回答に出さないための手順。
+- `.agents/skills/tcal-dimer-extractor/SKILL.md`: tcal dimer extractor のプロダクト・実装・検証方針。
+- `.agents/skills/tcal-agent-delegation/SKILL.md`: サブエージェント委任と、委任プロンプトを誤って最終回答に出さないための手順。
 
 サブエージェントへ委任する場合は、実際に利用可能な委任手段だけを使う。委任用 JSON や内部プロンプトをユーザー向け最終回答として出力してはいけない。利用可能な委任手段がない場合は、その制約を明示し、作業範囲を小さくして親エージェントが安全に進める。
 
