@@ -1,19 +1,6 @@
 import type { Atom, Bond, Molecule, Vec3 } from "../domain/types";
+import { covalentRadius } from "./elements";
 import { centroid, distance, translateByCell } from "./vector";
-
-const covalentRadii: Record<string, number> = {
-	H: 0.31,
-	B: 0.85,
-	C: 0.76,
-	N: 0.71,
-	O: 0.66,
-	F: 0.57,
-	P: 1.07,
-	S: 1.05,
-	Cl: 1.02,
-	Br: 1.2,
-	I: 1.39,
-};
 
 export function groupMolecules(
 	atoms: Atom[],
@@ -192,8 +179,8 @@ function inferPeriodicBondEdges(
 }
 
 function bondThreshold(a: string, b: string): number {
-	const radiusA = covalentRadii[a] ?? 0.77;
-	const radiusB = covalentRadii[b] ?? 0.77;
+	const radiusA = covalentRadius(a);
+	const radiusB = covalentRadius(b);
 	return (radiusA + radiusB) * 1.25 + 0.15;
 }
 

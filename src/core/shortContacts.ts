@@ -3,23 +3,10 @@ import type {
 	ShortContact,
 	ShortContactSettings,
 } from "../domain/types";
+import { vdwRadius } from "./elements";
 import { distance } from "./vector";
 
 const minimumContactDistance = 0.35;
-
-const vdwRadii: Record<string, number> = {
-	H: 1.2,
-	B: 1.92,
-	C: 1.7,
-	N: 1.55,
-	O: 1.52,
-	F: 1.47,
-	P: 1.8,
-	S: 1.8,
-	Cl: 1.75,
-	Br: 1.85,
-	I: 1.98,
-};
 
 export const defaultShortContactSettings: ShortContactSettings = {
 	tolerance: 0,
@@ -97,8 +84,4 @@ function computeMoleculePairContacts(
 	}
 
 	return contacts.sort((a, b) => a.gap - b.gap || a.distance - b.distance);
-}
-
-export function vdwRadius(element: string): number {
-	return vdwRadii[element] ?? 1.7;
 }

@@ -2,18 +2,11 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { Molecule, ShortContact, Vec3 } from "../domain/types";
-
-const elementColors: Record<string, number> = {
-	H: 0xd8dee9,
-	C: 0x9aa7b2,
-	N: 0x5aa9ff,
-	O: 0xff6b6b,
-	S: 0xffc857,
-	F: 0x8bd66f,
-	Cl: 0x8bd66f,
-	Br: 0xb7794a,
-	I: 0x8d6cc9,
-};
+import {
+	atomPickRadius as elementPickRadius,
+	atomRenderRadius,
+	elementColor,
+} from "../core/elements";
 
 const clickMoveTolerancePx = 4;
 
@@ -428,7 +421,7 @@ function roleColor(
 ): number {
 	if (role === "center") return 0x67e8f9;
 	if (role === "selected") return 0xfbbf24;
-	return elementColors[element] ?? 0xa3a3a3;
+	return elementColor(element);
 }
 
 function atomRadius(
@@ -436,15 +429,11 @@ function atomRadius(
 	role: "center" | "selected" | "idle",
 ): number {
 	const scale = role === "idle" ? 1 : 1.35;
-	if (element === "H") return 0.16 * scale;
-	if (element === "S" || element === "Cl") return 0.27 * scale;
-	return 0.22 * scale;
+	return atomRenderRadius(element) * scale;
 }
 
 function atomPickRadius(element: string): number {
-	if (element === "H") return 0.42;
-	if (element === "S" || element === "Cl") return 0.62;
-	return 0.56;
+	return elementPickRadius(element);
 }
 
 function moleculePickRadius(molecule: Molecule): number {
