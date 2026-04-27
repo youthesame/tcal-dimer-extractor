@@ -270,17 +270,25 @@ export function MoleculeViewer(props: {
 		function pickNeighborHit(
 			hits: THREE.Intersection[],
 		): THREE.Intersection | undefined {
-			const selectableHits = hits.filter((item) =>
-				isSelectableNeighbor(
-					item.object.userData.moleculeId as string | undefined,
-				),
-			);
+			const selectableHits = hits.filter((item) => {
+				const moleculeId = item.object.userData.moleculeId as
+					| string
+					| undefined;
+				return isCenterHit(moleculeId) || isSelectableNeighbor(moleculeId);
+			});
 			return (
 				selectableHits.find((item) => isSelectedVisibleHit(item)) ??
 				selectableHits.find((item) => isVisibleHit(item)) ??
+				selectableHits.find((item) =>
+					isCenterHit(item.object.userData.moleculeId as string | undefined),
+				) ??
 				selectableHits.find((item) => isSelectedHit(item)) ??
 				selectableHits[0]
 			);
+		}
+
+		function isCenterHit(moleculeId: string | undefined): boolean {
+			return !!props.centerId && moleculeId === props.centerId;
 		}
 
 		function isVisibleHit(hit: THREE.Intersection): boolean {

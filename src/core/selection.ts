@@ -14,6 +14,45 @@ export function normalizeAutoDimerLabels(dimers: DimerLabel[]): DimerLabel[] {
 	);
 }
 
+export function updateSelectionFromMoleculeClick(
+	centerId: string | null,
+	selected: DimerLabel[],
+	moleculeId: string,
+): { centerId: string | null; selected: DimerLabel[] } {
+	if (!centerId) {
+		return {
+			centerId: moleculeId,
+			selected: normalizeAutoDimerLabels(
+				selected.filter((item) => item.moleculeId !== moleculeId),
+			),
+		};
+	}
+
+	if (moleculeId === centerId) {
+		return { centerId: null, selected };
+	}
+
+	if (selected.some((item) => item.moleculeId === moleculeId)) {
+		return {
+			centerId,
+			selected: normalizeAutoDimerLabels(
+				selected.filter((item) => item.moleculeId !== moleculeId),
+			),
+		};
+	}
+
+	return {
+		centerId,
+		selected: normalizeAutoDimerLabels([
+			...selected,
+			{
+				moleculeId,
+				label: nextDimerLabel(selected.length),
+			},
+		]),
+	};
+}
+
 export function reconcileSelectionWithMoleculeIds(
 	centerId: string | null,
 	selected: DimerLabel[],

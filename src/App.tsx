@@ -29,9 +29,9 @@ import {
 	readRecipeFromCif,
 } from "./core/recipe";
 import {
-	nextDimerLabel,
 	normalizeAutoDimerLabels,
 	reconcileSelectionWithMoleculeIds,
+	updateSelectionFromMoleculeClick,
 } from "./core/selection";
 import { formatDistance } from "./core/vector";
 import type {
@@ -138,26 +138,13 @@ function App() {
 
 	function handleMoleculeClick(moleculeId: string) {
 		setExportStatus(null);
-		if (!centerId) {
-			setCenterId(moleculeId);
-			setSelected([]);
-			return;
-		}
-		if (moleculeId === centerId) return;
-		setSelected((current) => {
-			if (current.some((item) => item.moleculeId === moleculeId)) {
-				return normalizeAutoDimerLabels(
-					current.filter((item) => item.moleculeId !== moleculeId),
-				);
-			}
-			return normalizeAutoDimerLabels([
-				...current,
-				{
-					moleculeId,
-					label: nextDimerLabel(current.length),
-				},
-			]);
-		});
+		const nextSelection = updateSelectionFromMoleculeClick(
+			centerId,
+			selected,
+			moleculeId,
+		);
+		setCenterId(nextSelection.centerId);
+		setSelected(nextSelection.selected);
 	}
 
 	function updateRange(key: keyof CellRange, value: number) {

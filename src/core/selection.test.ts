@@ -3,6 +3,7 @@ import {
 	nextDimerLabel,
 	normalizeAutoDimerLabels,
 	reconcileSelectionWithMoleculeIds,
+	updateSelectionFromMoleculeClick,
 } from "./selection";
 
 describe("dimer selection labels", () => {
@@ -82,5 +83,97 @@ describe("dimer selection labels", () => {
 				new Set(["mol-neighbor@0,0,0"]),
 			),
 		).toEqual({ centerId: null, selected: [] });
+	});
+});
+
+describe("molecule click selection", () => {
+	it("sets the center molecule when no center is selected", () => {
+		expect(updateSelectionFromMoleculeClick(null, [], "mol-center")).toEqual({
+			centerId: "mol-center",
+			selected: [],
+		});
+	});
+
+	it("preserves selected dimers when setting a new center", () => {
+		expect(
+			updateSelectionFromMoleculeClick(
+				null,
+				[
+					{ moleculeId: "mol-neighbor-a", label: "dimer_1" },
+					{ moleculeId: "mol-neighbor-b", label: "pi-stack" },
+				],
+				"mol-center",
+			),
+		).toEqual({
+			centerId: "mol-center",
+			selected: [
+				{ moleculeId: "mol-neighbor-a", label: "dimer_1" },
+				{ moleculeId: "mol-neighbor-b", label: "pi-stack" },
+			],
+		});
+	});
+
+	it("removes the new center from selected dimers when re-centering", () => {
+		expect(
+			updateSelectionFromMoleculeClick(
+				null,
+				[
+					{ moleculeId: "mol-neighbor-a", label: "dimer_1" },
+					{ moleculeId: "mol-neighbor-b", label: "dimer_2" },
+				],
+				"mol-neighbor-a",
+			),
+		).toEqual({
+			centerId: "mol-neighbor-a",
+			selected: [{ moleculeId: "mol-neighbor-b", label: "dimer_1" }],
+		});
+	});
+
+	it("clears only the center when clicking the selected center", () => {
+		expect(
+			updateSelectionFromMoleculeClick(
+				"mol-center",
+				[
+					{ moleculeId: "mol-neighbor-a", label: "dimer_1" },
+					{ moleculeId: "mol-neighbor-b", label: "pi-stack" },
+				],
+				"mol-center",
+			),
+		).toEqual({
+			centerId: null,
+			selected: [
+				{ moleculeId: "mol-neighbor-a", label: "dimer_1" },
+				{ moleculeId: "mol-neighbor-b", label: "pi-stack" },
+			],
+		});
+	});
+
+	it("adds a neighbor dimer when the center is already selected", () => {
+		expect(
+			updateSelectionFromMoleculeClick("mol-center", [], "mol-neighbor"),
+		).toEqual({
+			centerId: "mol-center",
+			selected: [{ moleculeId: "mol-neighbor", label: "dimer_1" }],
+		});
+	});
+
+	it("removes a selected neighbor dimer and renumbers automatic labels", () => {
+		expect(
+			updateSelectionFromMoleculeClick(
+				"mol-center",
+				[
+					{ moleculeId: "mol-neighbor-a", label: "dimer_1" },
+					{ moleculeId: "mol-neighbor-b", label: "dimer_2" },
+					{ moleculeId: "mol-neighbor-c", label: "custom" },
+				],
+				"mol-neighbor-a",
+			),
+		).toEqual({
+			centerId: "mol-center",
+			selected: [
+				{ moleculeId: "mol-neighbor-b", label: "dimer_1" },
+				{ moleculeId: "mol-neighbor-c", label: "custom" },
+			],
+		});
 	});
 });
