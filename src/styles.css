@@ -235,7 +235,8 @@ h3 {
 }
 
 .range-row input,
-.dimer-row input {
+.dimer-row input,
+.setting-row input {
 	background: var(--bg);
 	border: 1px solid var(--line);
 	border-radius: 6px;
@@ -250,6 +251,20 @@ h3 {
 	display: flex;
 	gap: 8px;
 	margin: 10px 0;
+}
+
+.setting-row {
+	align-items: center;
+	color: var(--muted);
+	display: grid;
+	gap: 8px;
+	grid-template-columns: minmax(0, 1fr) 92px;
+	margin: 10px 0;
+}
+
+.setting-row span {
+	font-size: 13px;
+	min-width: 0;
 }
 
 .viewer-shell {

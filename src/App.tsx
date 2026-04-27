@@ -33,7 +33,11 @@ import {
 	reconcileSelectionWithMoleculeIds,
 	updateSelectionFromMoleculeClick,
 } from "./core/selection";
-import { formatDistance } from "./core/vector";
+import {
+	computeExternalShortContacts,
+	defaultShortContactSettings,
+} from "./core/shortContacts";
+import { centroid, formatDistance } from "./core/vector";
 import type {
 	CellRange,
 	CrystalStructure,
@@ -59,7 +63,11 @@ function App() {
 		unitCell: true,
 		labels: true,
 		bonds: true,
+		shortContacts: false,
 	});
+	const [shortContactTolerance, setShortContactTolerance] = useState(
+		defaultShortContactSettings.tolerance,
+	);
 	const [centerId, setCenterId] = useState<string | null>(null);
 	const [selected, setSelected] = useState<DimerLabel[]>([]);
 	const [error, setError] = useState<string | null>(null);
@@ -75,6 +83,21 @@ function App() {
 		[molecules],
 	);
 	const center = centerId ? moleculeMap.get(centerId) : undefined;
+	const shortContacts = useMemo(
+		() =>
+			crystal && display.shortContacts
+				? computeExternalShortContacts(
+						molecules,
+						buildMolecules(crystal, shortContactSearchRange(range)),
+						{
+							tolerance: shortContactTolerance,
+							maxContactsPerMoleculePair:
+								defaultShortContactSettings.maxContactsPerMoleculePair,
+						},
+					)
+				: [],
+		[crystal, display.shortContacts, molecules, range, shortContactTolerance],
+	);
 	const exportedDimers = useMemo(
 		() => buildExportedDimers(center, molecules, selected),
 		[center, molecules, selected],
@@ -145,6 +168,17 @@ function App() {
 		);
 		setCenterId(nextSelection.centerId);
 		setSelected(nextSelection.selected);
+	}
+
+	function revealHiddenMolecule(moleculeId: string) {
+		if (!crystal) return;
+		const molecule = buildMolecules(
+			crystal,
+			shortContactSearchRange(range),
+		).find((item) => item.id === moleculeId);
+		if (!molecule) return;
+		setRange(rangeIncludingMolecule(range, molecule));
+		setExportStatus(null);
 	}
 
 	function updateRange(key: keyof CellRange, value: number) {
@@ -361,6 +395,33 @@ function App() {
 								setDisplay((current) => ({ ...current, bonds: checked }))
 							}
 						/>
+						<Toggle
+							label={t("display.shortContacts")}
+							checked={display.shortContacts}
+							onChange={(checked) =>
+								setDisplay((current) => ({
+									...current,
+									shortContacts: checked,
+								}))
+							}
+						/>
+						{display.shortContacts ? (
+							<label className="setting-row">
+								<span>{t("display.shortContactTolerance")}</span>
+								<input
+									aria-label={t("display.shortContactTolerance")}
+									min={0}
+									step={0.05}
+									type="number"
+									value={shortContactTolerance}
+									onChange={(event) =>
+										setShortContactTolerance(
+											Math.max(0, Number(event.currentTarget.value)),
+										)
+									}
+								/>
+							</label>
+						) : null}
 					</section>
 				</aside>
 
@@ -387,8 +448,11 @@ function App() {
 						selectedIds={selected.map((item) => item.moleculeId)}
 						showBonds={display.bonds}
 						showLabels={display.labels}
+						showShortContacts={display.shortContacts}
 						showUnitCell={display.unitCell}
+						shortContacts={shortContacts}
 						viewKey={crystal?.fileName}
+						onHiddenMoleculeClick={revealHiddenMolecule}
 						onMoleculeClick={handleMoleculeClick}
 					/>
 					<button
@@ -558,6 +622,29 @@ function Toggle(props: {
 			<span>{props.label}</span>
 		</label>
 	);
+}
+
+function shortContactSearchRange(range: CellRange): CellRange {
+	return {
+		aMin: Math.floor(range.aMin) - 1,
+		aMax: Math.ceil(range.aMax) + 1,
+		bMin: Math.floor(range.bMin) - 1,
+		bMax: Math.ceil(range.bMax) + 1,
+		cMin: Math.floor(range.cMin) - 1,
+		cMax: Math.ceil(range.cMax) + 1,
+	};
+}
+
+function rangeIncludingMolecule(range: CellRange, molecule: Molecule): CellRange {
+	const fractional = centroid(molecule.atoms.map((atom) => atom.fractional));
+	return {
+		aMin: Math.min(range.aMin, Math.floor(fractional[0])),
+		aMax: Math.max(range.aMax, Math.floor(fractional[0]) + 1),
+		bMin: Math.min(range.bMin, Math.floor(fractional[1])),
+		bMax: Math.max(range.bMax, Math.floor(fractional[1]) + 1),
+		cMin: Math.min(range.cMin, Math.floor(fractional[2])),
+		cMax: Math.max(range.cMax, Math.floor(fractional[2]) + 1),
+	};
 }
 
 function MoleculeSummary({ molecule }: { molecule: Molecule }) {

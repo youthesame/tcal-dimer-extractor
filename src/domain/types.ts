@@ -61,3 +61,23 @@ export type ExportedDimer = {
 	neighbor: Molecule;
 	xyz: string;
 };
+
+export type ShortContactSettings = {
+	tolerance: number;
+	maxContactsPerMoleculePair: number;
+};
+
+export type ShortContact = {
+	id: string;
+	visibleMoleculeId: string;
+	hiddenMoleculeId: string;
+	visibleAtomIndex: number;
+	hiddenAtomIndex: number;
+	visibleAtomElement: string;
+	hiddenAtomElement: string;
+	visiblePosition: Vec3;
+	hiddenPosition: Vec3;
+	distance: number;
+	vdwSum: number;
+	gap: number;
+};

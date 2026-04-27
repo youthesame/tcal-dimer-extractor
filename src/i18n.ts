@@ -26,6 +26,8 @@ export const resources = {
 				unitCell: "Unit cell",
 				labels: "Labels",
 				bonds: "Bonds",
+				shortContacts: "Short contacts",
+				shortContactTolerance: "vdW tolerance (Å)",
 			},
 			viewer: {
 				empty: "Load a CIF file to begin.",
@@ -92,6 +94,8 @@ export const resources = {
 				unitCell: "単位格子",
 				labels: "ラベル",
 				bonds: "結合",
+				shortContacts: "Short contacts",
+				shortContactTolerance: "vdW tolerance (Å)",
 			},
 			viewer: {
 				empty: "CIFファイルを読み込んでください。",

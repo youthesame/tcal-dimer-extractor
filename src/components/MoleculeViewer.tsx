@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import type { Molecule, Vec3 } from "../domain/types";
+import type { Molecule, ShortContact, Vec3 } from "../domain/types";
 
 const elementColors: Record<string, number> = {
 	H: 0xd8dee9,
@@ -17,6 +17,13 @@ const elementColors: Record<string, number> = {
 
 const clickMoveTolerancePx = 4;
 
+type PickTarget = {
+	kind: "visible" | "hidden";
+	moleculeId: string;
+};
+
+type PointerDownHit = PickTarget & { x: number; y: number };
+
 export function MoleculeViewer(props: {
 	cell?: [Vec3, Vec3, Vec3];
 	molecules: Molecule[];
@@ -24,18 +31,23 @@ export function MoleculeViewer(props: {
 	selectedIds: string[];
 	showBonds: boolean;
 	showLabels: boolean;
+	showShortContacts: boolean;
 	showUnitCell: boolean;
+	shortContacts: ShortContact[];
 	viewKey?: string;
+	onHiddenMoleculeClick: (moleculeId: string) => void;
 	onMoleculeClick: (moleculeId: string) => void;
 }) {
 	const mountRef = useRef<HTMLDivElement | null>(null);
 	const clickHandlerRef = useRef(props.onMoleculeClick);
+	const hiddenClickHandlerRef = useRef(props.onHiddenMoleculeClick);
 	const viewStateRef = useRef<{
 		key?: string;
 		position: THREE.Vector3;
 		target: THREE.Vector3;
 	} | null>(null);
 	clickHandlerRef.current = props.onMoleculeClick;
+	hiddenClickHandlerRef.current = props.onHiddenMoleculeClick;
 
 	useEffect(() => {
 		const mount = mountRef.current;
@@ -183,6 +195,20 @@ export function MoleculeViewer(props: {
 			scene.add(group);
 		}
 
+		if (props.showShortContacts) {
+			const hiddenAtomKeys = new Set<string>();
+			for (const contact of props.shortContacts) {
+				const line = makeShortContact(contact);
+				scene.add(line);
+				const hiddenAtomKey = `${contact.hiddenMoleculeId}:${contact.hiddenAtomIndex}`;
+				if (hiddenAtomKeys.has(hiddenAtomKey)) continue;
+				hiddenAtomKeys.add(hiddenAtomKey);
+				const atom = makeHiddenContactAtom(contact);
+				scene.add(atom);
+				clickable.push(atom);
+			}
+		}
+
 		if (props.cell && props.showUnitCell) {
 			scene.add(makeUnitCell(props.cell));
 			scene.add(makeCrystalAxes(props.cell));
@@ -216,14 +242,13 @@ export function MoleculeViewer(props: {
 
 		const raycaster = new THREE.Raycaster();
 		const pointer = new THREE.Vector2();
-		let pointerDownHit: { moleculeId: string; x: number; y: number } | null =
-			null;
+		let pointerDownHit: PointerDownHit | null = null;
 
 		function onPointerDown(event: PointerEvent) {
 			if (event.button !== 0) return;
-			const moleculeId = pickMoleculeIdAt(event);
-			pointerDownHit = moleculeId
-				? { moleculeId, x: event.clientX, y: event.clientY }
+			const hit = pickHitAt(event);
+			pointerDownHit = hit
+				? { ...hit, x: event.clientX, y: event.clientY }
 				: null;
 		}
 
@@ -236,10 +261,17 @@ export function MoleculeViewer(props: {
 				event.clientX - pointerDownHit.x,
 				event.clientY - pointerDownHit.y,
 			);
-			const moleculeId =
-				moved <= clickMoveTolerancePx ? pickMoleculeIdAt(event) : undefined;
-			if (moleculeId && moleculeId === pointerDownHit.moleculeId) {
-				clickHandlerRef.current(moleculeId);
+			const hit = moved <= clickMoveTolerancePx ? pickHitAt(event) : undefined;
+			if (
+				hit &&
+				hit.kind === pointerDownHit.kind &&
+				hit.moleculeId === pointerDownHit.moleculeId
+			) {
+				if (hit.kind === "hidden") {
+					hiddenClickHandlerRef.current(hit.moleculeId);
+				} else {
+					clickHandlerRef.current(hit.moleculeId);
+				}
 			}
 			pointerDownHit = null;
 		}
@@ -248,14 +280,22 @@ export function MoleculeViewer(props: {
 			pointerDownHit = null;
 		}
 
-		function pickMoleculeIdAt(event: PointerEvent): string | undefined {
+		function pickHitAt(event: PointerEvent): PickTarget | undefined {
 			const rect = renderer.domElement.getBoundingClientRect();
 			pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
 			pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 			raycaster.setFromCamera(pointer, camera);
 			const hits = raycaster.intersectObjects(clickable, false);
+			const hiddenHit = hits.find((item) => isHiddenContactHit(item));
+			if (hiddenHit) {
+				return {
+					kind: "hidden",
+					moleculeId: hiddenHit.object.userData.moleculeId as string,
+				};
+			}
 			const hit = props.centerId ? pickNeighborHit(hits) : pickCenterHit(hits);
-			return hit?.object.userData.moleculeId as string | undefined;
+			const moleculeId = hit?.object.userData.moleculeId as string | undefined;
+			return moleculeId ? { kind: "visible", moleculeId } : undefined;
 		}
 
 		function pickCenterHit(
@@ -301,6 +341,10 @@ export function MoleculeViewer(props: {
 
 		function isSelectedVisibleHit(hit: THREE.Intersection): boolean {
 			return isSelectedHit(hit) && isVisibleHit(hit);
+		}
+
+		function isHiddenContactHit(hit: THREE.Intersection): boolean {
+			return hit.object.userData.pickKind === "hidden-contact-atom";
 		}
 
 		function isSelectableNeighbor(moleculeId: string | undefined): boolean {
@@ -367,7 +411,9 @@ export function MoleculeViewer(props: {
 		props.selectedIds,
 		props.showBonds,
 		props.showLabels,
+		props.showShortContacts,
 		props.showUnitCell,
+		props.shortContacts,
 		props.viewKey,
 	]);
 
@@ -441,6 +487,54 @@ function makeBond(
 		direction.normalize(),
 	);
 	return cylinder;
+}
+
+function makeShortContact(contact: ShortContact): THREE.Line {
+	const intensity = Math.min(Math.max(Math.abs(contact.gap) / 0.6, 0), 1);
+	const start = new THREE.Vector3(
+		contact.visiblePosition[0],
+		contact.visiblePosition[1],
+		contact.visiblePosition[2],
+	);
+	const end = new THREE.Vector3(
+		contact.hiddenPosition[0],
+		contact.hiddenPosition[1],
+		contact.hiddenPosition[2],
+	);
+	const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+	const line = new THREE.Line(
+		geometry,
+		new THREE.LineDashedMaterial({
+			color: intensity > 0.55 ? 0xfb7185 : 0xc084fc,
+			dashSize: 0.22,
+			gapSize: 0.14,
+			transparent: true,
+			opacity: 0.92,
+		}),
+	);
+	line.computeLineDistances();
+	return line;
+}
+
+function makeHiddenContactAtom(contact: ShortContact): THREE.Mesh {
+	const material = new THREE.MeshPhongMaterial({
+		color: 0xfb7185,
+		emissive: 0x7f1d1d,
+		emissiveIntensity: 0.75,
+		shininess: 48,
+	});
+	const sphere = new THREE.Mesh(
+		new THREE.SphereGeometry(atomRadius(contact.hiddenAtomElement, "selected"), 16, 12),
+		material,
+	);
+	sphere.position.set(
+		contact.hiddenPosition[0],
+		contact.hiddenPosition[1],
+		contact.hiddenPosition[2],
+	);
+	sphere.userData.moleculeId = contact.hiddenMoleculeId;
+	sphere.userData.pickKind = "hidden-contact-atom";
+	return sphere;
 }
 
 function makeUnitCell(cell: [Vec3, Vec3, Vec3]): THREE.LineSegments {
