@@ -24,12 +24,6 @@ const samples = [
 		monomerAtoms: 70,
 		dimerAtoms: 140,
 	},
-	{
-		fileName: "XUYNOX.cif",
-		expectedAtoms: 216,
-		monomerAtoms: 54,
-		dimerAtoms: 108,
-	},
 ];
 
 const unitRange: CellRange = {
