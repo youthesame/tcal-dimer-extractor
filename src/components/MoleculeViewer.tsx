@@ -59,8 +59,7 @@ export function MoleculeViewer(props: {
 		container.appendChild(renderer.domElement);
 
 		const controls = new OrbitControls(camera, renderer.domElement);
-		controls.enableDamping = true;
-		controls.dampingFactor = 0.08;
+		controls.enableDamping = false;
 
 		const ambient = new THREE.AmbientLight(0xffffff, 1.7);
 		scene.add(ambient);
