@@ -20,6 +20,7 @@ export const resources = {
 			expansion: {
 				title: "2. Cell Expansion",
 				apply: "Apply",
+				reset: "Reset",
 			},
 			display: {
 				title: "3. Display",
@@ -28,6 +29,13 @@ export const resources = {
 				bonds: "Bonds",
 				shortContacts: "Short contacts",
 				shortContactTolerance: "vdW tolerance (Å)",
+			},
+			disorder: {
+				title: "Disorder Model",
+				description: "Only the selected disorder group is used for molecules, contacts, and export.",
+				assembly: "Assembly {{assembly}}",
+				group: "Group {{group}}",
+				major: "major: {{group}}",
 			},
 			viewer: {
 				empty: "Load a CIF file to begin.",
@@ -88,6 +96,7 @@ export const resources = {
 			expansion: {
 				title: "2. セル拡張",
 				apply: "適用",
+				reset: "リセット",
 			},
 			display: {
 				title: "3. 表示",
@@ -96,6 +105,13 @@ export const resources = {
 				bonds: "結合",
 				shortContacts: "Short contacts",
 				shortContactTolerance: "vdW tolerance (Å)",
+			},
+			disorder: {
+				title: "Disorder model",
+				description: "選択したdisorder groupだけを分子・接触・出力に使います。",
+				assembly: "Assembly {{assembly}}",
+				group: "Group {{group}}",
+				major: "major: {{group}}",
 			},
 			viewer: {
 				empty: "CIFファイルを読み込んでください。",

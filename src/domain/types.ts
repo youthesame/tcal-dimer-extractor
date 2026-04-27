@@ -11,12 +11,37 @@ export type CellRange = {
 
 export type Atom = {
 	id: string;
+	label: string;
 	element: string;
 	position: Vec3;
 	fractional: Vec3;
 	sourceIndex: number;
 	translation: Vec3;
+	occupancy: number;
+	disorderAssembly: string | null;
+	disorderGroup: string | null;
 };
+
+export type DisorderGroupSummary = {
+	assembly: string;
+	group: string;
+	occupancy: number | null;
+	atomCount: number;
+	isMajor: boolean;
+};
+
+export type DisorderAssemblySummary = {
+	assembly: string;
+	majorGroup: string;
+	groups: DisorderGroupSummary[];
+};
+
+export type DisorderSummary = {
+	hasDisorder: boolean;
+	assemblies: DisorderAssemblySummary[];
+};
+
+export type DisorderSelection = Record<string, string>;
 
 export type Bond = {
 	from: number;
@@ -31,6 +56,7 @@ export type CrystalStructure = {
 	atoms: Atom[];
 	rawAtomCount: number | null;
 	preferredMoleculeAtomCount: number | null;
+	disorderSummary: DisorderSummary;
 };
 
 export type Molecule = {

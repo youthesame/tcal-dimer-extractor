@@ -4,6 +4,9 @@ import type {
 	Bond,
 	CellRange,
 	CrystalStructure,
+	DisorderAssemblySummary,
+	DisorderSelection,
+	DisorderSummary,
 	Molecule,
 	Vec3,
 } from "../domain/types";
@@ -34,13 +37,21 @@ export function parseCrystalFromCif(
 	if (!name || !atoms) {
 		throw new Error("No CIF data block with atom coordinates was found.");
 	}
+	const parsedCif = parseCif(cifText);
+	const block = getCifBlock(parsedCif, name);
 
 	const symbols = atoms.get_chemical_symbols();
 	const positions = atoms.get_positions();
 	const fractional = atoms.get_scaled_positions();
 	const cell = atoms.get_cell() as [Vec3, Vec3, Vec3];
 
-	const rawAtomCount = getRawAtomCount(cifText);
+	const rawAtomCount = getRawAtomCount(block);
+	const atomSites = getAtomSiteMetadata(block);
+	const symmetryCount =
+		rawAtomCount && Number.isInteger(symbols.length / rawAtomCount)
+			? symbols.length / rawAtomCount
+			: 1;
+	const disorderSummary = summarizeDisorder(atomSites);
 
 	return {
 		name,
@@ -49,19 +60,79 @@ export function parseCrystalFromCif(
 		cell,
 		atoms: symbols.map((element, index) => ({
 			id: `atom-${index}`,
+			label: atomSites[Math.floor(index / symmetryCount)]?.label ?? `atom-${index}`,
 			element,
 			position: toVec3(positions[index]),
 			fractional: toVec3(fractional[index]),
-			sourceIndex: index,
+			sourceIndex: atomSites[Math.floor(index / symmetryCount)]?.sourceIndex ?? index,
 			translation: [0, 0, 0],
+			occupancy: atomSites[Math.floor(index / symmetryCount)]?.occupancy ?? 1,
+			disorderAssembly:
+				atomSites[Math.floor(index / symmetryCount)]?.disorderAssembly ?? null,
+			disorderGroup:
+				atomSites[Math.floor(index / symmetryCount)]?.disorderGroup ?? null,
 		})),
 		rawAtomCount,
 		preferredMoleculeAtomCount: inferPreferredMoleculeAtomCount(
-			cifText,
+			rawAtomCount,
 			symbols,
 			positions.map(toVec3),
 			fractional.map(toVec3),
 			cell,
+		),
+		disorderSummary,
+	};
+}
+
+export function defaultDisorderSelection(
+	summary: DisorderSummary,
+): DisorderSelection {
+	return Object.fromEntries(
+		summary.assemblies.map((assembly) => [
+			assembly.assembly,
+			assembly.majorGroup,
+		]),
+	);
+}
+
+export function normalizeDisorderSelection(
+	summary: DisorderSummary,
+	selection: DisorderSelection = {},
+): DisorderSelection {
+	const normalized = defaultDisorderSelection(summary);
+	for (const assembly of summary.assemblies) {
+		const requested = selection[assembly.assembly];
+		if (assembly.groups.some((group) => group.group === requested)) {
+			normalized[assembly.assembly] = requested;
+		}
+	}
+	return normalized;
+}
+
+export function resolveDisorderCrystal(
+	crystal: CrystalStructure,
+	selection: DisorderSelection = defaultDisorderSelection(crystal.disorderSummary),
+): CrystalStructure {
+	if (!crystal.disorderSummary.hasDisorder) return crystal;
+
+	const normalizedSelection = normalizeDisorderSelection(
+		crystal.disorderSummary,
+		selection,
+	);
+	const atoms = crystal.atoms.filter((atom) => {
+		if (!atom.disorderAssembly || !atom.disorderGroup) return true;
+		return normalizedSelection[atom.disorderAssembly] === atom.disorderGroup;
+	});
+	const rawAtomCount = new Set(atoms.map((atom) => atom.sourceIndex)).size;
+
+	return {
+		...crystal,
+		atoms,
+		rawAtomCount,
+		preferredMoleculeAtomCount: inferPreferredMoleculeAtomCountFromAtoms(
+			rawAtomCount,
+			atoms,
+			crystal.cell,
 		),
 	};
 }
@@ -250,15 +321,29 @@ function buildSymmetryOrderedMolecules(
 }
 
 function inferPreferredMoleculeAtomCount(
-	cifText: string,
+	rawAtomCount: number | null,
 	symbols: string[],
 	positions: Vec3[],
 	fractional: Vec3[],
 	cell: [Vec3, Vec3, Vec3],
 ): number | null {
-	const rawAtomCount = getRawAtomCount(cifText);
 	if (!rawAtomCount || rawAtomCount <= 0) return null;
+	return inferPreferredMoleculeAtomCountFromValues(
+		rawAtomCount,
+		symbols,
+		positions,
+		fractional,
+		cell,
+	);
+}
 
+function inferPreferredMoleculeAtomCountFromValues(
+	rawAtomCount: number,
+	symbols: string[],
+	positions: Vec3[],
+	fractional: Vec3[],
+	cell: [Vec3, Vec3, Vec3],
+): number | null {
 	const symmetryCount = positions.length / rawAtomCount;
 	if (!Number.isInteger(symmetryCount) || symmetryCount < 1) return rawAtomCount;
 
@@ -266,11 +351,15 @@ function inferPreferredMoleculeAtomCount(
 		const atomIndex = rawIndex * symmetryCount;
 		return {
 			id: `raw-atom-${rawIndex}`,
+			label: `raw-atom-${rawIndex}`,
 			element: symbols[atomIndex],
 			position: positions[atomIndex],
 			fractional: fractional[atomIndex],
 			sourceIndex: rawIndex,
 			translation: [0, 0, 0],
+			occupancy: 1,
+			disorderAssembly: null,
+			disorderGroup: null,
 		};
 	});
 
@@ -285,6 +374,21 @@ function inferPreferredMoleculeAtomCount(
 	}
 
 	return rawAtomCount;
+}
+
+function inferPreferredMoleculeAtomCountFromAtoms(
+	rawAtomCount: number,
+	atoms: Atom[],
+	cell: [Vec3, Vec3, Vec3],
+): number | null {
+	if (rawAtomCount <= 0) return null;
+	return inferPreferredMoleculeAtomCountFromValues(
+		rawAtomCount,
+		atoms.map((atom) => atom.element),
+		atoms.map((atom) => atom.position),
+		atoms.map((atom) => atom.fractional),
+		cell,
+	);
 }
 
 function moleculeAtomCountCandidates(rawAtomCount: number): number[] {
@@ -331,12 +435,114 @@ function isConnectedMoleculeChunk(
 	return visited.size === atoms.length;
 }
 
-function getRawAtomCount(cifText: string): number | null {
-	const parsed = parseCif(cifText);
-	const block = Object.values(parsed)[0] as
-		| Record<string, { value?: unknown[] }>
-		| undefined;
+type CifBlock = Record<string, { value?: unknown[] }>;
+
+function getCifBlock(parsed: Record<string, unknown>, name: string): CifBlock {
+	return (parsed[name] ?? Object.values(parsed)[0] ?? {}) as CifBlock;
+}
+
+function getRawAtomCount(block: CifBlock): number | null {
 	return block?._atom_site_label?.value?.length ?? null;
+}
+
+function getAtomSiteMetadata(block: CifBlock): Array<
+	Pick<
+		Atom,
+		| "label"
+		| "sourceIndex"
+		| "occupancy"
+		| "disorderAssembly"
+		| "disorderGroup"
+	>
+> {
+	const labels = block?._atom_site_label?.value ?? [];
+	const occupancies = block?._atom_site_occupancy?.value ?? [];
+	const assemblies = block?._atom_site_disorder_assembly?.value ?? [];
+	const groups = block?._atom_site_disorder_group?.value ?? [];
+
+	return labels.map((label, index) => ({
+		label: atomValueText(label) ?? `atom-${index}`,
+		sourceIndex: index,
+		occupancy: atomValueNumber(occupancies[index]) ?? 1,
+		disorderAssembly: atomValueText(assemblies[index]),
+		disorderGroup: atomValueText(groups[index]),
+	}));
+}
+
+function summarizeDisorder(
+	atoms: Array<
+		Pick<Atom, "occupancy" | "disorderAssembly" | "disorderGroup">
+	>,
+): DisorderSummary {
+	const byAssembly = new Map<
+		string,
+		Map<string, { atomCount: number; occupancyTotal: number }>
+	>();
+
+	for (const atom of atoms) {
+		if (!atom.disorderAssembly || !atom.disorderGroup) continue;
+		const groups = byAssembly.get(atom.disorderAssembly) ?? new Map();
+		const current = groups.get(atom.disorderGroup) ?? {
+			atomCount: 0,
+			occupancyTotal: 0,
+		};
+		current.atomCount += 1;
+		current.occupancyTotal += atom.occupancy;
+		groups.set(atom.disorderGroup, current);
+		byAssembly.set(atom.disorderAssembly, groups);
+	}
+
+	const assemblies: DisorderAssemblySummary[] = Array.from(
+		byAssembly.entries(),
+		([assembly, groups]) => {
+			const summaries = Array.from(groups.entries(), ([group, stats]) => ({
+				assembly,
+				group,
+				occupancy:
+					stats.atomCount > 0 ? stats.occupancyTotal / stats.atomCount : null,
+				atomCount: stats.atomCount,
+				isMajor: false,
+			})).sort(
+				(a, b) =>
+					(b.occupancy ?? 0) - (a.occupancy ?? 0) ||
+					a.group.localeCompare(b.group),
+			);
+			const majorGroup = summaries[0]?.group ?? "";
+			return {
+				assembly,
+				majorGroup,
+				groups: summaries.map((summary) => ({
+					...summary,
+					isMajor: summary.group === majorGroup,
+				})),
+			};
+		},
+	).sort((a, b) => a.assembly.localeCompare(b.assembly));
+
+	return {
+		hasDisorder: assemblies.length > 0,
+		assemblies,
+	};
+}
+
+function atomValueText(value: unknown): string | null {
+	if (typeof value === "string") {
+		return value === "." || value === "?" ? null : value;
+	}
+	if (!value || typeof value !== "object") return null;
+	const record = value as Record<string, unknown>;
+	if (typeof record.text === "string") {
+		return record.text === "." || record.text === "?" ? null : record.text;
+	}
+	if (typeof record.num === "number") return String(record.num);
+	if (record.type === "N/A" || record.type === "unknown") return null;
+	return null;
+}
+
+function atomValueNumber(value: unknown): number | null {
+	if (!value || typeof value !== "object") return null;
+	const record = value as Record<string, unknown>;
+	return typeof record.num === "number" ? record.num : null;
 }
 
 function toVec3(values: number[] | undefined): Vec3 {

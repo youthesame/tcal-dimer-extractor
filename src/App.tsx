@@ -14,7 +14,12 @@ import type { DragEvent } from "react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MoleculeViewer } from "./components/MoleculeViewer";
-import { buildMolecules, parseCrystalFromCif } from "./core/cif";
+import {
+	buildMolecules,
+	normalizeDisorderSelection,
+	parseCrystalFromCif,
+	resolveDisorderCrystal,
+} from "./core/cif";
 import {
 	buildExportedDimers,
 	buildZip,
@@ -42,6 +47,8 @@ import type {
 	CellRange,
 	CrystalStructure,
 	DimerLabel,
+	DisorderSelection,
+	DisorderSummary,
 	Molecule,
 } from "./domain/types";
 
@@ -68,15 +75,23 @@ function App() {
 	const [shortContactTolerance, setShortContactTolerance] = useState(
 		defaultShortContactSettings.tolerance,
 	);
+	const [disorderSelection, setDisorderSelection] = useState<DisorderSelection>(
+		{},
+	);
 	const [centerId, setCenterId] = useState<string | null>(null);
 	const [selected, setSelected] = useState<DimerLabel[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [exportStatus, setExportStatus] = useState<string | null>(null);
 	const [isDraggingCif, setIsDraggingCif] = useState(false);
 
+	const activeCrystal = useMemo(
+		() =>
+			crystal ? resolveDisorderCrystal(crystal, disorderSelection) : null,
+		[crystal, disorderSelection],
+	);
 	const molecules = useMemo(
-		() => (crystal ? buildMolecules(crystal, range) : []),
-		[crystal, range],
+		() => (activeCrystal ? buildMolecules(activeCrystal, range) : []),
+		[activeCrystal, range],
 	);
 	const moleculeMap = useMemo(
 		() => new Map(molecules.map((molecule) => [molecule.id, molecule])),
@@ -88,7 +103,10 @@ function App() {
 			crystal && display.shortContacts
 				? computeExternalShortContacts(
 						molecules,
-						buildMolecules(crystal, shortContactSearchRange(range)),
+						buildMolecules(
+							activeCrystal ?? crystal,
+							shortContactSearchRange(range),
+						),
 						{
 							tolerance: shortContactTolerance,
 							maxContactsPerMoleculePair:
@@ -96,7 +114,14 @@ function App() {
 						},
 					)
 				: [],
-		[crystal, display.shortContacts, molecules, range, shortContactTolerance],
+		[
+			activeCrystal,
+			crystal,
+			display.shortContacts,
+			molecules,
+			range,
+			shortContactTolerance,
+		],
 	);
 	const exportedDimers = useMemo(
 		() => buildExportedDimers(center, molecules, selected),
@@ -108,10 +133,19 @@ function App() {
 		try {
 			const parsed = parseCrystalFromCif(cifText, fileName);
 			const recipe = readRecipeFromCif(cifText);
+			const nextDisorderSelection = normalizeDisorderSelection(
+				parsed.disorderSummary,
+				recipe?.disorderSelection,
+			);
+			const nextCrystal = resolveDisorderCrystal(
+				parsed,
+				nextDisorderSelection,
+			);
 			setCrystal(parsed);
+			setDisorderSelection(nextDisorderSelection);
 			setRange(recipe?.cellRange ?? defaultRange);
 			const nextMolecules = buildMolecules(
-				parsed,
+				nextCrystal,
 				recipe?.cellRange ?? defaultRange,
 			);
 			const ids = new Set(nextMolecules.map((molecule) => molecule.id));
@@ -171,9 +205,9 @@ function App() {
 	}
 
 	function revealHiddenMolecule(moleculeId: string) {
-		if (!crystal) return;
+		if (!activeCrystal) return;
 		const molecule = buildMolecules(
-			crystal,
+			activeCrystal,
 			shortContactSearchRange(range),
 		).find((item) => item.id === moleculeId);
 		if (!molecule) return;
@@ -182,12 +216,23 @@ function App() {
 	}
 
 	function updateRange(key: keyof CellRange, value: number) {
-		const nextRange = { ...range, [key]: value };
+		applyRange({ ...range, [key]: value });
+	}
+
+	function resetRange() {
+		setRange(defaultRange);
+		setCenterId(null);
+		setSelected([]);
+		setExportStatus(null);
+	}
+
+	function applyRange(nextRange: CellRange) {
 		setRange(nextRange);
-		if (!crystal) return;
+		setExportStatus(null);
+		if (!activeCrystal) return;
 
 		const ids = new Set(
-			buildMolecules(crystal, nextRange).map((molecule) => molecule.id),
+			buildMolecules(activeCrystal, nextRange).map((molecule) => molecule.id),
 		);
 		const reconciled = reconcileSelectionWithMoleculeIds(
 			centerId,
@@ -196,6 +241,24 @@ function App() {
 		);
 		setCenterId(reconciled.centerId);
 		setSelected(reconciled.selected);
+	}
+
+	function updateDisorderGroup(assembly: string, group: string) {
+		if (!crystal) return;
+		const nextSelection = { ...disorderSelection, [assembly]: group };
+		const nextCrystal = resolveDisorderCrystal(crystal, nextSelection);
+		const ids = new Set(
+			buildMolecules(nextCrystal, range).map((molecule) => molecule.id),
+		);
+		const reconciled = reconcileSelectionWithMoleculeIds(
+			centerId,
+			selected,
+			ids,
+		);
+		setDisorderSelection(nextSelection);
+		setCenterId(reconciled.centerId);
+		setSelected(reconciled.selected);
+		setExportStatus(null);
 	}
 
 	function updateLabel(moleculeId: string, label: string) {
@@ -215,6 +278,8 @@ function App() {
 			center,
 			selected,
 			molecules,
+			disorderSelection,
+			disorderSummary: crystal.disorderSummary,
 		});
 		downloadText(
 			`${withoutExtension(crystal.fileName)}_tcal_recipe.cif`,
@@ -256,6 +321,8 @@ function App() {
 			center,
 			selected,
 			molecules,
+			disorderSelection,
+			disorderSummary: crystal.disorderSummary,
 		});
 		const files = [
 			...exportedDimers.map((dimer) => ({
@@ -347,8 +414,26 @@ function App() {
 						</p>
 					</section>
 
+					{crystal?.disorderSummary.hasDisorder ? (
+						<DisorderSelector
+							selection={disorderSelection}
+							summary={crystal.disorderSummary}
+							onChange={updateDisorderGroup}
+						/>
+					) : null}
+
 					<section>
-						<h2>{t("expansion.title")}</h2>
+						<div className="section-heading">
+							<h2>{t("expansion.title")}</h2>
+							<button
+								className="secondary-button"
+								type="button"
+								onClick={resetRange}
+							>
+								<RotateCcw aria-hidden="true" size={14} />
+								{t("expansion.reset")}
+							</button>
+						</div>
 						<RangeRow
 							axis="a"
 							minKey="aMin"
@@ -442,7 +527,7 @@ function App() {
 						</span>
 					</div>
 					<MoleculeViewer
-						cell={crystal?.cell}
+						cell={activeCrystal?.cell}
 						molecules={molecules}
 						centerId={centerId}
 						selectedIds={selected.map((item) => item.moleculeId)}
@@ -451,7 +536,7 @@ function App() {
 						showShortContacts={display.shortContacts}
 						showUnitCell={display.unitCell}
 						shortContacts={shortContacts}
-						viewKey={crystal?.fileName}
+						viewKey={`${crystal?.fileName ?? ""}:${JSON.stringify(disorderSelection)}`}
 						onHiddenMoleculeClick={revealHiddenMolecule}
 						onMoleculeClick={handleMoleculeClick}
 					/>
@@ -622,6 +707,62 @@ function Toggle(props: {
 			<span>{props.label}</span>
 		</label>
 	);
+}
+
+function DisorderSelector(props: {
+	summary: DisorderSummary;
+	selection: DisorderSelection;
+	onChange: (assembly: string, group: string) => void;
+}) {
+	const { t } = useTranslation();
+	return (
+		<section>
+			<h2>{t("disorder.title")}</h2>
+			<p className="meta-line">{t("disorder.description")}</p>
+			<div className="disorder-list">
+				{props.summary.assemblies.map((assembly) => (
+					<div className="disorder-assembly" key={assembly.assembly}>
+						<div className="disorder-heading">
+							<strong>
+								{t("disorder.assembly", { assembly: assembly.assembly })}
+							</strong>
+							<span>
+								{t("disorder.major", { group: assembly.majorGroup })}
+							</span>
+						</div>
+						<div className="disorder-groups">
+							{assembly.groups.map((group) => {
+								const selected =
+									props.selection[assembly.assembly] === group.group;
+								return (
+									<button
+										className={selected ? "selected" : ""}
+										key={group.group}
+										type="button"
+										onClick={() =>
+											props.onChange(assembly.assembly, group.group)
+										}
+									>
+										<span>
+											{t("disorder.group", { group: group.group })}
+										</span>
+										<small>
+											{formatOccupancy(group.occupancy)} / {group.atomCount}{" "}
+											{t("metrics.atoms")}
+										</small>
+									</button>
+								);
+							})}
+						</div>
+					</div>
+				))}
+			</div>
+		</section>
+	);
+}
+
+function formatOccupancy(occupancy: number | null): string {
+	return occupancy === null ? "occ -" : `occ ${occupancy.toFixed(3)}`;
 }
 
 function shortContactSearchRange(range: CellRange): CellRange {

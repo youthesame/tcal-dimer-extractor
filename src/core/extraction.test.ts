@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { CellRange } from "../domain/types";
-import { buildMolecules, parseCrystalFromCif } from "./cif";
+import {
+	buildMolecules,
+	defaultDisorderSelection,
+	parseCrystalFromCif,
+	resolveDisorderCrystal,
+} from "./cif";
 import { toDimerXyz } from "./export";
 import { inferBonds } from "./molecule";
 import { appendRecipeToCif, makeRecipe, readRecipeFromCif } from "./recipe";
@@ -99,15 +104,73 @@ describe("CIF to tcal dimer extraction", () => {
 			center,
 			selected: [{ moleculeId: neighbor.id, label: "A pi-stack" }],
 			molecules: [center, neighbor],
+			disorderSelection: defaultDisorderSelection(crystal.disorderSummary),
+			disorderSummary: crystal.disorderSummary,
 		});
 
 		const cifWithRecipe = appendRecipeToCif(cifText, recipe);
 		const restored = readRecipeFromCif(cifWithRecipe);
 
-		expect(restored?.schemaVersion).toBe(1);
+		expect(restored?.schemaVersion).toBe(2);
 		expect(restored?.centerMoleculeId).toBe(center.id);
 		expect(restored?.centerAtomCount).toBe(36);
 		expect(restored?.selectedDimers[0].label).toBe("A pi-stack");
+	});
+
+	it("uses the major disorder group by default and can switch active groups", () => {
+		const crystal = parseCrystalFromCif(disorderedCif, "disordered.cif");
+
+		expect(crystal.disorderSummary.assemblies).toEqual([
+			{
+				assembly: "A",
+				majorGroup: "1",
+				groups: [
+					{
+						assembly: "A",
+						group: "1",
+						occupancy: 0.6,
+						atomCount: 1,
+						isMajor: true,
+					},
+					{
+						assembly: "A",
+						group: "2",
+						occupancy: 0.4,
+						atomCount: 1,
+						isMajor: false,
+					},
+				],
+			},
+		]);
+
+		const majorCrystal = resolveDisorderCrystal(crystal);
+		const minorCrystal = resolveDisorderCrystal(crystal, { A: "2" });
+
+		expect(majorCrystal.atoms.map((atom) => atom.label)).toEqual(["C1", "C2A"]);
+		expect(minorCrystal.atoms.map((atom) => atom.label)).toEqual(["C1", "O2B"]);
+		expect(buildMolecules(majorCrystal, unitRange)[0].atoms).toHaveLength(2);
+		expect(buildMolecules(minorCrystal, unitRange)[0].atoms).toHaveLength(2);
+	});
+
+	it("records disorder selection in the recipe", async () => {
+		const crystal = parseCrystalFromCif(disorderedCif, "disordered.cif");
+		const selection = { A: "2" };
+		const activeCrystal = resolveDisorderCrystal(crystal, selection);
+		const [center] = buildMolecules(activeCrystal, unitRange);
+		const recipe = await makeRecipe({
+			cifText: disorderedCif,
+			fileName: "disordered.cif",
+			cellRange: unitRange,
+			center,
+			selected: [],
+			molecules: [center],
+			disorderSelection: selection,
+			disorderSummary: crystal.disorderSummary,
+		});
+
+		expect(recipe.disorderPolicy).toBe("selected-groups");
+		expect(recipe.disorderSelection).toEqual(selection);
+		expect(recipe.disorderAssemblies[0].majorGroup).toBe("1");
 	});
 
 	it("treats equal cell expansion boundaries as an empty half-open range", () => {
@@ -194,6 +257,36 @@ describe("CIF to tcal dimer extraction", () => {
 function readSample(fileName: string): string {
 	return readFileSync(join(root, "data", "cifs", fileName), "utf8");
 }
+
+const disorderedCif = `
+data_disordered
+_symmetry_cell_setting           triclinic
+_symmetry_space_group_name_H-M   'P 1'
+_symmetry_Int_Tables_number      1
+loop_
+_symmetry_equiv_pos_site_id
+_symmetry_equiv_pos_as_xyz
+1 x,y,z
+_cell_length_a                   10
+_cell_length_b                   10
+_cell_length_c                   10
+_cell_angle_alpha                90
+_cell_angle_beta                 90
+_cell_angle_gamma                90
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_U_iso_or_equiv
+_atom_site_occupancy
+_atom_site_disorder_assembly
+_atom_site_disorder_group
+C1 C 0.10 0.10 0.10 0.02 1 . .
+C2A C 0.22 0.10 0.10 0.02 0.60 A 1
+O2B O 0.22 0.10 0.10 0.02 0.40 A 2
+`;
 
 function isConnectedByCurrentCoordinates(
 	size: number,
