@@ -20,7 +20,10 @@ export function computeExternalShortContacts(
 ): ShortContact[] {
 	const contacts: ShortContact[] = [];
 	const tolerance = Math.max(settings.tolerance, 0);
-	const maxPerPair = Math.max(1, Math.floor(settings.maxContactsPerMoleculePair));
+	const maxPerPair = Math.max(
+		1,
+		Math.floor(settings.maxContactsPerMoleculePair),
+	);
 	const visibleIds = new Set(visibleMolecules.map((molecule) => molecule.id));
 	const hiddenMolecules = searchMolecules.filter(
 		(molecule) => !visibleIds.has(molecule.id),
@@ -59,7 +62,10 @@ function computeMoleculePairContacts(
 		) {
 			const visibleAtom = visibleMolecule.atoms[visibleAtomIndex];
 			const hiddenAtom = hiddenMolecule.atoms[hiddenAtomIndex];
-			const contactDistance = distance(visibleAtom.position, hiddenAtom.position);
+			const contactDistance = distance(
+				visibleAtom.position,
+				hiddenAtom.position,
+			);
 			if (contactDistance < minimumContactDistance) continue;
 
 			const vdwSum =

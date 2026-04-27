@@ -85,8 +85,7 @@ function App() {
 	const [isDraggingCif, setIsDraggingCif] = useState(false);
 
 	const activeCrystal = useMemo(
-		() =>
-			crystal ? resolveDisorderCrystal(crystal, disorderSelection) : null,
+		() => (crystal ? resolveDisorderCrystal(crystal, disorderSelection) : null),
 		[crystal, disorderSelection],
 	);
 	const molecules = useMemo(
@@ -137,10 +136,7 @@ function App() {
 				parsed.disorderSummary,
 				recipe?.disorderSelection,
 			);
-			const nextCrystal = resolveDisorderCrystal(
-				parsed,
-				nextDisorderSelection,
-			);
+			const nextCrystal = resolveDisorderCrystal(parsed, nextDisorderSelection);
 			setCrystal(parsed);
 			setDisorderSelection(nextDisorderSelection);
 			setRange(recipe?.cellRange ?? defaultRange);
@@ -726,9 +722,7 @@ function DisorderSelector(props: {
 							<strong>
 								{t("disorder.assembly", { assembly: assembly.assembly })}
 							</strong>
-							<span>
-								{t("disorder.major", { group: assembly.majorGroup })}
-							</span>
+							<span>{t("disorder.major", { group: assembly.majorGroup })}</span>
 						</div>
 						<div className="disorder-groups">
 							{assembly.groups.map((group) => {
@@ -743,9 +737,7 @@ function DisorderSelector(props: {
 											props.onChange(assembly.assembly, group.group)
 										}
 									>
-										<span>
-											{t("disorder.group", { group: group.group })}
-										</span>
+										<span>{t("disorder.group", { group: group.group })}</span>
 										<small>
 											{formatOccupancy(group.occupancy)} / {group.atomCount}{" "}
 											{t("metrics.atoms")}
@@ -776,7 +768,10 @@ function shortContactSearchRange(range: CellRange): CellRange {
 	};
 }
 
-function rangeIncludingMolecule(range: CellRange, molecule: Molecule): CellRange {
+function rangeIncludingMolecule(
+	range: CellRange,
+	molecule: Molecule,
+): CellRange {
 	const fractional = centroid(molecule.atoms.map((atom) => atom.fractional));
 	return {
 		aMin: Math.min(range.aMin, Math.floor(fractional[0])),

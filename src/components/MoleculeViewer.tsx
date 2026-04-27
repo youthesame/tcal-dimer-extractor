@@ -1,12 +1,12 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import type { Molecule, ShortContact, Vec3 } from "../domain/types";
 import {
-	atomPickRadius as elementPickRadius,
 	atomRenderRadius,
 	elementColor,
+	atomPickRadius as elementPickRadius,
 } from "../core/elements";
+import type { Molecule, ShortContact, Vec3 } from "../domain/types";
 
 const clickMoveTolerancePx = 4;
 
@@ -513,7 +513,11 @@ function makeHiddenContactAtom(contact: ShortContact): THREE.Mesh {
 		shininess: 48,
 	});
 	const sphere = new THREE.Mesh(
-		new THREE.SphereGeometry(atomRadius(contact.hiddenAtomElement, "selected"), 16, 12),
+		new THREE.SphereGeometry(
+			atomRadius(contact.hiddenAtomElement, "selected"),
+			16,
+			12,
+		),
 		material,
 	);
 	sphere.position.set(

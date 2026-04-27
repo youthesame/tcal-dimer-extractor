@@ -60,11 +60,13 @@ export function parseCrystalFromCif(
 		cell,
 		atoms: symbols.map((element, index) => ({
 			id: `atom-${index}`,
-			label: atomSites[Math.floor(index / symmetryCount)]?.label ?? `atom-${index}`,
+			label:
+				atomSites[Math.floor(index / symmetryCount)]?.label ?? `atom-${index}`,
 			element,
 			position: toVec3(positions[index]),
 			fractional: toVec3(fractional[index]),
-			sourceIndex: atomSites[Math.floor(index / symmetryCount)]?.sourceIndex ?? index,
+			sourceIndex:
+				atomSites[Math.floor(index / symmetryCount)]?.sourceIndex ?? index,
 			translation: [0, 0, 0],
 			occupancy: atomSites[Math.floor(index / symmetryCount)]?.occupancy ?? 1,
 			disorderAssembly:
@@ -111,7 +113,9 @@ export function normalizeDisorderSelection(
 
 export function resolveDisorderCrystal(
 	crystal: CrystalStructure,
-	selection: DisorderSelection = defaultDisorderSelection(crystal.disorderSummary),
+	selection: DisorderSelection = defaultDisorderSelection(
+		crystal.disorderSummary,
+	),
 ): CrystalStructure {
 	if (!crystal.disorderSummary.hasDisorder) return crystal;
 
@@ -345,7 +349,8 @@ function inferPreferredMoleculeAtomCountFromValues(
 	cell: [Vec3, Vec3, Vec3],
 ): number | null {
 	const symmetryCount = positions.length / rawAtomCount;
-	if (!Number.isInteger(symmetryCount) || symmetryCount < 1) return rawAtomCount;
+	if (!Number.isInteger(symmetryCount) || symmetryCount < 1)
+		return rawAtomCount;
 
 	const rawAtoms = Array.from({ length: rawAtomCount }, (_, rawIndex): Atom => {
 		const atomIndex = rawIndex * symmetryCount;
@@ -365,8 +370,12 @@ function inferPreferredMoleculeAtomCountFromValues(
 
 	for (const atomCount of moleculeAtomCountCandidates(rawAtomCount)) {
 		if (rawAtomCount % atomCount !== 0) continue;
-		const chunksAreConnected = range(0, rawAtomCount, atomCount).every((start) =>
-			isConnectedMoleculeChunk(rawAtoms.slice(start, start + atomCount), cell),
+		const chunksAreConnected = range(0, rawAtomCount, atomCount).every(
+			(start) =>
+				isConnectedMoleculeChunk(
+					rawAtoms.slice(start, start + atomCount),
+					cell,
+				),
 		);
 		if (chunksAreConnected) {
 			return atomCount;
@@ -445,14 +454,12 @@ function getRawAtomCount(block: CifBlock): number | null {
 	return block?._atom_site_label?.value?.length ?? null;
 }
 
-function getAtomSiteMetadata(block: CifBlock): Array<
+function getAtomSiteMetadata(
+	block: CifBlock,
+): Array<
 	Pick<
 		Atom,
-		| "label"
-		| "sourceIndex"
-		| "occupancy"
-		| "disorderAssembly"
-		| "disorderGroup"
+		"label" | "sourceIndex" | "occupancy" | "disorderAssembly" | "disorderGroup"
 	>
 > {
 	const labels = block?._atom_site_label?.value ?? [];
@@ -470,9 +477,7 @@ function getAtomSiteMetadata(block: CifBlock): Array<
 }
 
 function summarizeDisorder(
-	atoms: Array<
-		Pick<Atom, "occupancy" | "disorderAssembly" | "disorderGroup">
-	>,
+	atoms: Array<Pick<Atom, "occupancy" | "disorderAssembly" | "disorderGroup">>,
 ): DisorderSummary {
 	const byAssembly = new Map<
 		string,

@@ -211,7 +211,9 @@ const elementColors: Record<string, number> = {
 };
 
 export function hasElementData(element: string): boolean {
-	return element in covalentRadii && element in vdwRadii && element in elementColors;
+	return (
+		element in covalentRadii && element in vdwRadii && element in elementColors
+	);
 }
 
 export function covalentRadius(element: string): number {

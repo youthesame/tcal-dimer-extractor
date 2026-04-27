@@ -32,7 +32,8 @@ export const resources = {
 			},
 			disorder: {
 				title: "Disorder Model",
-				description: "Only the selected disorder group is used for molecules, contacts, and export.",
+				description:
+					"Only the selected disorder group is used for molecules, contacts, and export.",
 				assembly: "Assembly {{assembly}}",
 				group: "Group {{group}}",
 				major: "major: {{group}}",
