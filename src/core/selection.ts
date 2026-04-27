@@ -13,3 +13,20 @@ export function normalizeAutoDimerLabels(dimers: DimerLabel[]): DimerLabel[] {
 			: dimer,
 	);
 }
+
+export function reconcileSelectionWithMoleculeIds(
+	centerId: string | null,
+	selected: DimerLabel[],
+	moleculeIds: ReadonlySet<string>,
+): { centerId: string | null; selected: DimerLabel[] } {
+	if (!centerId || !moleculeIds.has(centerId)) {
+		return { centerId: null, selected: [] };
+	}
+
+	return {
+		centerId,
+		selected: normalizeAutoDimerLabels(
+			selected.filter((item) => moleculeIds.has(item.moleculeId)),
+		),
+	};
+}

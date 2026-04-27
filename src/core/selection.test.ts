@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { nextDimerLabel, normalizeAutoDimerLabels } from "./selection";
+import {
+	nextDimerLabel,
+	normalizeAutoDimerLabels,
+	reconcileSelectionWithMoleculeIds,
+} from "./selection";
 
 describe("dimer selection labels", () => {
 	it("creates one-based default dimer labels", () => {
@@ -31,5 +35,52 @@ describe("dimer selection labels", () => {
 			{ moleculeId: "mol-a", label: "pi-stack" },
 			{ moleculeId: "mol-b", label: "dimer_2" },
 		]);
+	});
+
+	it("keeps center and selected dimers that still exist after molecule rebuild", () => {
+		expect(
+			reconcileSelectionWithMoleculeIds(
+				"mol-center@0,0,0",
+				[{ moleculeId: "mol-neighbor@0,0,0", label: "pi-stack" }],
+				new Set(["mol-center@0,0,0", "mol-neighbor@0,0,0"]),
+			),
+		).toEqual({
+			centerId: "mol-center@0,0,0",
+			selected: [{ moleculeId: "mol-neighbor@0,0,0", label: "pi-stack" }],
+		});
+	});
+
+	it("drops only selected dimers that no longer exist after molecule rebuild", () => {
+		expect(
+			reconcileSelectionWithMoleculeIds(
+				"mol-center@0,0,0",
+				[
+					{ moleculeId: "mol-neighbor-a@0,0,0", label: "dimer_1" },
+					{ moleculeId: "mol-neighbor-b@0,0,0", label: "A" },
+					{ moleculeId: "mol-neighbor-c@0,0,0", label: "dimer_3" },
+				],
+				new Set([
+					"mol-center@0,0,0",
+					"mol-neighbor-a@0,0,0",
+					"mol-neighbor-c@0,0,0",
+				]),
+			),
+		).toEqual({
+			centerId: "mol-center@0,0,0",
+			selected: [
+				{ moleculeId: "mol-neighbor-a@0,0,0", label: "dimer_1" },
+				{ moleculeId: "mol-neighbor-c@0,0,0", label: "dimer_2" },
+			],
+		});
+	});
+
+	it("clears selected dimers when the center no longer exists after molecule rebuild", () => {
+		expect(
+			reconcileSelectionWithMoleculeIds(
+				"mol-center@0,0,0",
+				[{ moleculeId: "mol-neighbor@0,0,0", label: "pi-stack" }],
+				new Set(["mol-neighbor@0,0,0"]),
+			),
+		).toEqual({ centerId: null, selected: [] });
 	});
 });

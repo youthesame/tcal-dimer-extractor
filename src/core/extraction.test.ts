@@ -6,6 +6,7 @@ import { buildMolecules, parseCrystalFromCif } from "./cif";
 import { toDimerXyz } from "./export";
 import { inferBonds } from "./molecule";
 import { appendRecipeToCif, makeRecipe, readRecipeFromCif } from "./recipe";
+import { reconcileSelectionWithMoleculeIds } from "./selection";
 import { centroid } from "./vector";
 
 const root = process.cwd();
@@ -168,6 +169,25 @@ describe("CIF to tcal dimer extraction", () => {
 			unitMolecules.length,
 		);
 		expect(slightlyExpanded.length).toBeLessThan(unitMolecules.length * 2);
+	});
+
+	it("keeps selected molecule ids stable when a cell range expands around them", () => {
+		const fileName = "Pentacene.cif";
+		const cifText = readSample(fileName);
+		const crystal = parseCrystalFromCif(cifText, fileName);
+		const [center, neighbor] = buildMolecules(crystal, unitRange);
+		const expanded = buildMolecules(crystal, { ...unitRange, aMax: 1.5 });
+
+		expect(
+			reconcileSelectionWithMoleculeIds(
+				center.id,
+				[{ moleculeId: neighbor.id, label: "pi-stack" }],
+				new Set(expanded.map((molecule) => molecule.id)),
+			),
+		).toEqual({
+			centerId: center.id,
+			selected: [{ moleculeId: neighbor.id, label: "pi-stack" }],
+		});
 	});
 });
 

@@ -28,7 +28,11 @@ import {
 	makeRecipe,
 	readRecipeFromCif,
 } from "./core/recipe";
-import { nextDimerLabel, normalizeAutoDimerLabels } from "./core/selection";
+import {
+	nextDimerLabel,
+	normalizeAutoDimerLabels,
+	reconcileSelectionWithMoleculeIds,
+} from "./core/selection";
 import { formatDistance } from "./core/vector";
 import type {
 	CellRange,
@@ -88,21 +92,15 @@ function App() {
 				recipe?.cellRange ?? defaultRange,
 			);
 			const ids = new Set(nextMolecules.map((molecule) => molecule.id));
-			setCenterId(
-				recipe && ids.has(recipe.centerMoleculeId)
-					? recipe.centerMoleculeId
-					: null,
-			);
-			setSelected(
-				recipe
-					? recipe.selectedDimers
-							.filter((item) => ids.has(item.moleculeId))
-							.map((item) => ({
-								moleculeId: item.moleculeId,
-								label: item.label,
-							}))
-					: [],
-			);
+			const restoredSelection = recipe
+				? reconcileSelectionWithMoleculeIds(
+						recipe.centerMoleculeId,
+						recipe.selectedDimers,
+						ids,
+					)
+				: { centerId: null, selected: [] };
+			setCenterId(restoredSelection.centerId);
+			setSelected(restoredSelection.selected);
 			setError(null);
 			setExportStatus(null);
 		} catch (caught) {
@@ -163,9 +161,20 @@ function App() {
 	}
 
 	function updateRange(key: keyof CellRange, value: number) {
-		setRange((current) => ({ ...current, [key]: value }));
-		setCenterId(null);
-		setSelected([]);
+		const nextRange = { ...range, [key]: value };
+		setRange(nextRange);
+		if (!crystal) return;
+
+		const ids = new Set(
+			buildMolecules(crystal, nextRange).map((molecule) => molecule.id),
+		);
+		const reconciled = reconcileSelectionWithMoleculeIds(
+			centerId,
+			selected,
+			ids,
+		);
+		setCenterId(reconciled.centerId);
+		setSelected(reconciled.selected);
 	}
 
 	function updateLabel(moleculeId: string, label: string) {
